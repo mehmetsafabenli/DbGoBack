@@ -1,3 +1,5 @@
+using System.Data.Common;
+using GoBack.Core.SqlServer.Options;
 using Microsoft.Extensions.Configuration;
 
 namespace GoBack.Core.SqlServer;
@@ -5,29 +7,34 @@ namespace GoBack.Core.SqlServer;
 public class SqlServerHelper
 {
     private readonly string _connectionString;
+    private readonly Func<DbConnection> _connectionFactory;
+    private readonly SqlServerOptions _options;
     private readonly IConfiguration _configuration;
 
     public SqlServerHelper(string connectionString,
-        IConfiguration configuration)
+        IConfiguration configuration, Func<DbConnection> connectionFactory, SqlServerOptions options)
     {
         _connectionString = connectionString;
         _configuration = configuration;
+        _connectionFactory = connectionFactory;
+        _options = options;
     }
 
     #region GetConnectionString
 
     private string GetConnectionString(string connectionString)
     {
-        if (string.IsNullOrEmpty(connectionString))
+        if (IsConnectionStringValid(connectionString))
         {
-            if (IsConnectionStringValid(connectionString))
-            {
-            }
+            return connectionString;
         }
 
-        int a = 10_000;
+        if (ConfigurationHaveConnectionString(connectionString))
+        {
+            return _configuration.GetConnectionString(connectionString);
+        }
 
-        return connectionString;
+        throw new ArgumentException("Connection string is not valid");
     }
 
     private bool IsConnectionStringValid(string connectionString)
@@ -37,10 +44,18 @@ public class SqlServerHelper
                && connectionString.Contains(';');
     }
 
-    private bool ConfigurationHaveConnectionString()
+    private bool ConfigurationHaveConnectionString(string connectionString)
     {
-        return _configuration.GetConnectionString("GoBackDbConnection")
+        return _configuration.GetConnectionString(connectionString)
                != null;
+    }
+
+    internal DbConnection CreateAndOpenConnection()
+    {
+        using (_options.Dispose?.Invoke())
+        {
+            return _connectionFactory();
+        }
     }
 
     #endregion
